@@ -1,5 +1,5 @@
 import React from 'react'
-import profile from "../../assets/images/about/hero-profile.jpg"
+import profile from "../../assets/images/about/ken-lapitan-dp2.webp"
 import { RiDownloadLine } from '@remixicon/react'
 import { Link } from 'react-router-dom'
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import workScribble from "../../assets/images/custom/work-scribble.svg"
-import { supabase } from '../../supabaseClient'
+import { getSupabaseErrorMessage, supabase } from '../../supabaseClient'
 import ImageSlider from '../ui/imageSlider';
 import { Link } from 'react-router-dom';
 
@@ -14,14 +14,22 @@ const Portfolio = () => {
     useEffect(() => {
         const fetchProjects = async () => {
             setLoading(true);
-            const { data, error } = await supabase
-                .from('projects')
-                .select('*')
-                .order('order', { ascending: true });
-            if (error) {
-                setError(error.message);
-            } else {
-                setProjects(data);
+            setError(null);
+            try {
+                if (!supabase) {
+                    throw new Error(getSupabaseErrorMessage());
+                }
+                const { data, error } = await supabase
+                    .from('projects')
+                    .select('*')
+                    .order('order', { ascending: true });
+                if (error) {
+                    setError(getSupabaseErrorMessage(error));
+                } else {
+                    setProjects(data ?? []);
+                }
+            } catch (err) {
+                setError(getSupabaseErrorMessage(err));
             }
             setLoading(false);
         };

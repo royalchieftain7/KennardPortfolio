@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
-import { supabase } from "../../supabaseClient";
+import { getSupabaseErrorMessage, supabase } from "../../supabaseClient";
+import { DndContext, closestCenter } from "@dnd-kit/core";
+import { arrayMove, SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
 
 const ADMIN_CACHE_KEY = "admin_logged_in";
 
@@ -23,11 +25,23 @@ const AdminDashboard = () => {
   useEffect(() => {
     const fetchProjects = async () => {
       setFetching(true);
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("order", { ascending: true });
-      if (!error) setProjects(data);
+      setError("");
+      try {
+        if (!supabase) {
+          throw new Error(getSupabaseErrorMessage());
+        }
+        const { data, error } = await supabase
+          .from("projects")
+          .select("*")
+          .order("order", { ascending: true });
+        if (error) {
+          setError(getSupabaseErrorMessage(error));
+        } else {
+          setProjects(data ?? []);
+        }
+      } catch (err) {
+        setError(getSupabaseErrorMessage(err));
+      }
       setFetching(false);
     };
     fetchProjects();
@@ -38,6 +52,12 @@ const AdminDashboard = () => {
     setLoading(true);
     setSuccess("");
     setError("");
+
+    if (!supabase) {
+      setError(getSupabaseErrorMessage());
+      setLoading(false);
+      return;
+    }
 
     // REMOVE: Check Supabase auth session (allow all uploads)
     // const { data: sessionData } = await supabase.auth.getSession();
@@ -111,7 +131,7 @@ const AdminDashboard = () => {
     try {
       imageUrls = await Promise.all(uploadPromises);
     } catch (uploadError) {
-      setError("Upload failed: " + uploadError.message);
+      setError("Upload failed: " + getSupabaseErrorMessage(uploadError));
       setLoading(false);
       return;
     }
@@ -123,24 +143,28 @@ const AdminDashboard = () => {
     }
 
     // Insert into projects table with image_urls array
-    const { error: dbError } = await supabase.from("projects").insert([
-      {
-        title,
-        category,
-        image_url: imageUrls, // store array in image_url
-        size,
-        website: website && typeof website === "string" && website.trim() ? website : websiteUrl && websiteUrl.trim() ? websiteUrl : null,
-      },
-    ]);
-    if (dbError) {
-      setError(dbError.message);
-    } else {
-      setSuccess("Portfolio item added successfully!");
-      setTitle("");
-      setCategory("");
-      setFiles([]);
-      setSize("normal");
-      setModalOpen(false);
+    try {
+      const { error: dbError } = await supabase.from("projects").insert([
+        {
+          title,
+          category,
+          image_url: imageUrls,
+          size,
+          website: website && typeof website === "string" && website.trim() ? website : websiteUrl && websiteUrl.trim() ? websiteUrl : null,
+        },
+      ]);
+      if (dbError) {
+        setError(getSupabaseErrorMessage(dbError));
+      } else {
+        setSuccess("Portfolio item added successfully!");
+        setTitle("");
+        setCategory("");
+        setFiles([]);
+        setSize("normal");
+        setModalOpen(false);
+      }
+    } catch (err) {
+      setError(getSupabaseErrorMessage(err));
     }
     setLoading(false);
   };
@@ -159,11 +183,19 @@ const AdminDashboard = () => {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    const { error } = await supabase.from("projects").delete().eq("id", deleteId);
-    if (error) {
-      alert("Failed to delete item: " + error.message);
-    } else {
-      setProjects((prev) => prev.filter((p) => p.id !== deleteId));
+    if (!supabase) {
+      alert(getSupabaseErrorMessage());
+      return;
+    }
+    try {
+      const { error } = await supabase.from("projects").delete().eq("id", deleteId);
+      if (error) {
+        alert("Failed to delete item: " + getSupabaseErrorMessage(error));
+      } else {
+        setProjects((prev) => prev.filter((p) => p.id !== deleteId));
+      }
+    } catch (err) {
+      alert("Failed to delete item: " + getSupabaseErrorMessage(err));
     }
     setDeleteId(null);
   };
@@ -173,23 +205,31 @@ const AdminDashboard = () => {
   };
 
   const handleEditSave = async (updated) => {
-    const { error } = await supabase
-      .from("projects")
-      .update({
-        title: updated.title,
-        category: updated.category,
-        size: updated.size,
-        image_url: updated.image_url,
-        website: updated.website && typeof updated.websiteUrl === "string" && updated.websiteUrl.trim() ? updated.websiteUrl : null,
-      })
-      .eq("id", updated.id);
-    if (error) {
-      alert("Failed to update item: " + error.message);
-    } else {
-      setProjects((prev) =>
-        prev.map((p) => (p.id === updated.id ? { ...p, ...updated, website: updated.website && typeof updated.websiteUrl === "string" && updated.websiteUrl.trim() ? updated.websiteUrl : null } : p))
-      );
-      setEditItem(null);
+    if (!supabase) {
+      alert(getSupabaseErrorMessage());
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .update({
+          title: updated.title,
+          category: updated.category,
+          size: updated.size,
+          image_url: updated.image_url,
+          website: updated.website && typeof updated.websiteUrl === "string" && updated.websiteUrl.trim() ? updated.websiteUrl : null,
+        })
+        .eq("id", updated.id);
+      if (error) {
+        alert("Failed to update item: " + getSupabaseErrorMessage(error));
+      } else {
+        setProjects((prev) =>
+          prev.map((p) => (p.id === updated.id ? { ...p, ...updated, website: updated.website && typeof updated.websiteUrl === "string" && updated.websiteUrl.trim() ? updated.websiteUrl : null } : p))
+        );
+        setEditItem(null);
+      }
+    } catch (err) {
+      alert("Failed to update item: " + getSupabaseErrorMessage(err));
     }
   };
 
@@ -213,8 +253,49 @@ const AdminDashboard = () => {
         justifyContent: "flex-start"
       }}
       tabIndex={0}
-      data-drag-index={idx}
     >
+      {/* Image preview */}
+      {item.image_url && Array.isArray(item.image_url) && item.image_url.length > 0 && item.image_url.map((src, i) => (
+        <img
+          key={src}
+          src={src}
+          alt={item.title}
+          style={{
+            width: "100%",
+            borderRadius: "8px",
+            marginBottom: "0.75rem",
+            objectFit: "cover",
+            maxHeight: 180
+          }}
+        />
+      ))}
+      {/* Video preview (seek to 15s, no controls, not playable) */}
+      {/* Remove item.video_url logic: use image_url for both images and videos */}
+      {/* Render first video if present in image_url array */}
+      {Array.isArray(item.image_url) && item.image_url.some(src => typeof src === "string" && src.trim().toLowerCase().endsWith(".mp4")) && (
+        <video
+          src={item.image_url.find(src => typeof src === "string" && src.trim().toLowerCase().endsWith(".mp4"))}
+          style={{
+            width: "100%",
+            borderRadius: "8px",
+            marginBottom: "0.75rem",
+            objectFit: "cover",
+            maxHeight: 180,
+            pointerEvents: "none"
+          }}
+          muted
+          playsInline
+          preload="metadata"
+          tabIndex={-1}
+          onContextMenu={e => e.preventDefault()}
+          controls={false}
+          ref={el => {
+            if (el) {
+              el.currentTime = 15;
+            }
+          }}
+        />
+      )}
       <button
         onClick={() => handleDelete(item.id)}
         style={{
@@ -301,13 +382,6 @@ const AdminDashboard = () => {
           />
         );
       })()}
-      {item.video_url && (
-        <video
-          src={item.video_url}
-          controls
-          style={{ width: "100%", borderRadius: "8px", marginBottom: "0.75rem", maxHeight: 180 }}
-        />
-      )}
       <div style={{ fontWeight: 600, fontSize: "1.1rem", marginBottom: "0.25rem" }}>{item.title}</div>
       <div style={{ color: "#aaa", fontSize: "0.95rem", marginBottom: "0.25rem" }}>{item.category}</div>
       <div style={{ fontSize: "0.85rem", color: "#888" }}>{item.size}</div>
@@ -341,6 +415,10 @@ const AdminDashboard = () => {
 
   const handleImageUpload = async (file) => {
     if (!file) return null;
+    if (!supabase) {
+      alert(getSupabaseErrorMessage());
+      return null;
+    }
     const allowedTypes = [
       "image/jpeg",
       "image/png",
@@ -360,17 +438,22 @@ const AdminDashboard = () => {
 
     const bucket = "portfolio-media";
     const filePath = `${Date.now()}_${file.name}`;
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from(bucket)
-      .upload(filePath, file, { cacheControl: "3600", upsert: false });
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, { cacheControl: "3600", upsert: false });
 
-    if (uploadError) {
-      alert("Upload failed: " + uploadError.message);
+      if (uploadError) {
+        alert("Upload failed: " + getSupabaseErrorMessage(uploadError));
+        return null;
+      }
+
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
+      return urlData?.publicUrl || null;
+    } catch (err) {
+      alert("Upload failed: " + getSupabaseErrorMessage(err));
       return null;
     }
-
-    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(filePath);
-    return urlData?.publicUrl || null;
   };
 
   const renderEditModal = () => {
@@ -827,72 +910,48 @@ const AdminDashboard = () => {
         >
           Portfolio Items
         </h2>
+        {error && (
+          <div style={{ color: "#ff4d4f", marginBottom: "1rem" }}>{error}</div>
+        )}
         {fetching ? (
           <div>Loading...</div>
         ) : (
           <div style={{ width: "100%" }}>
-            <DragDropContext
-              onDragEnd={async (result) => {
-                if (!result.destination) return;
-                const reordered = Array.from(projects);
-                const [removed] = reordered.splice(result.source.index, 1);
-                reordered.splice(result.destination.index, 0, removed);
-
-                // Update order in state
+            <DndContext
+              collisionDetection={closestCenter}
+              onDragEnd={async (event) => {
+                const { active, over } = event;
+                if (!over || active.id === over.id) return;
+                if (!supabase) {
+                  setError(getSupabaseErrorMessage());
+                  return;
+                }
+                const oldIndex = projects.findIndex((item) => item.id === active.id);
+                const newIndex = projects.findIndex((item) => item.id === over.id);
+                const reordered = arrayMove(projects, oldIndex, newIndex);
                 setProjects(reordered);
-
-                // Persist order to Supabase
-                await Promise.all(
-                  reordered.map((item, idx) =>
-                    supabase
-                      .from("projects")
-                      .update({ order: idx })
-                      .eq("id", item.id)
-                  )
-                );
+                try {
+                  await Promise.all(
+                    reordered.map((item, idx) =>
+                      supabase
+                        .from("projects")
+                        .update({ order: idx })
+                        .eq("id", item.id)
+                    )
+                  );
+                } catch (err) {
+                  setError(getSupabaseErrorMessage(err));
+                }
               }}
             >
-              <Droppable droppableId="portfolio-list" direction="horizontal">
-                {(provided) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    style={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "1rem",
-                      width: "100%",
-                      justifyContent: "flex-start",
-                      alignItems: "stretch",
-                      minHeight: 420,
-                    }}
-                  >
-                    {projects.map((item, idx) => (
-                      <Draggable key={item.id} draggableId={item.id.toString()} index={idx}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            style={{
-                              ...provided.draggableProps.style,
-                              opacity: snapshot.isDragging ? 0.7 : 1,
-                              cursor: "grab",
-                              minWidth: 260,
-                              maxWidth: 320,
-                              userSelect: "none"
-                            }}
-                          >
-                            {renderCard(item, idx)}
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-                )}
-              </Droppable>
-            </DragDropContext>
+              <SortableContext items={projects.map((item) => item.id)} strategy={horizontalListSortingStrategy}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem", width: "100%", justifyContent: "flex-start", alignItems: "stretch", minHeight: 420 }}>
+                  {projects.map((item, idx) => (
+                    <SortablePortfolioCard key={item.id} item={item} idx={idx} renderCard={renderCard} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           </div>
         )}
       </div>
@@ -904,3 +963,30 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
+function SortablePortfolioCard({ item, idx, renderCard }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+        transition,
+        opacity: isDragging ? 0.7 : 1,
+        cursor: "grab",
+        minWidth: 260,
+        maxWidth: 320,
+        userSelect: "none",
+        position: "relative"
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      {/* Drag handle icon */}
+      <div style={{position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", cursor: "grab", zIndex: 10}} title="Drag to reorder" aria-label="Drag handle">
+        <span style={{fontSize: 20}}>⠿</span>
+      </div>
+      {renderCard(item, idx)}
+    </div>
+  );
+}

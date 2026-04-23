@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import PinInput from "./PinInput";
 import emailjs from "emailjs-com";
+import { getNetworkErrorMessage } from "../../utils/networkErrors";
 
 const ADMIN_EMAIL = "kennardodavinci@gmail.com";
 
@@ -70,7 +71,7 @@ const AdminLogin = ({ onLogin }) => {
       setCodeMessage("A 6-digit PIN has been sent to your email.");
       setStep(2);
     } catch (err) {
-      setError("Failed to send PIN. Please try again.");
+      setError(getNetworkErrorMessage(err, "EmailJS"));
     }
     setLoading(false);
   };

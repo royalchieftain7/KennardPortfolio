@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { RiMailLine, RiMailOpenLine } from '@remixicon/react'
 import emailjs from "emailjs-com";
+import { getNetworkErrorMessage } from "../../utils/networkErrors";
 
 const SERVICE_ID = "service_ly4egvl";
 const TEMPLATE_ID = "template_5azl2el";
@@ -35,7 +36,7 @@ const ContactForm = () => {
             setSuccess("Message sent successfully!");
             setForm({ fullName: "", email: "", message: "" });
         } catch (err) {
-            setError("Failed to send message. Please try again.");
+            setError(getNetworkErrorMessage(err, "EmailJS"));
         }
         setLoading(false);
     };
