@@ -1,5 +1,6 @@
 import React from 'react'
 import profile from "../../assets/images/about/ken-lapitan-dp2.webp"
+import cvFile from "../../assets/images/CV Kennard Lapitan 2026.pdf"
 import { RiDownloadLine } from '@remixicon/react'
 import { Link } from 'react-router-dom'
 
@@ -20,7 +21,7 @@ const Hero = () => {
                             <h2>Hi, I’m Kennard Lapitan, freelance designer with 7+ years of experience creating polished app interfaces and eye-catching visuals. </h2>
                             <div className="hero-btns">
                                 <a
-                                    href="/CV Kennard Lapitan 2025.pdf"
+                                    href={cvFile}
                                     className="theme-btn"
                                     download
                                 >
